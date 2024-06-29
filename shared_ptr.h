@@ -1,6 +1,8 @@
 #include <memory>
 #include <type_traits>
 
+class BaseControlBlock;
+
 template <typename T>
 class SharedPtr;
 
@@ -9,12 +11,26 @@ class WeakPtr;
 
 template <typename T>
 class EnableSharedFromThis {
-  SharedPtr<T> shared_from_this() { return SharedPtr<T>(weak_this); }
+public:
+  SharedPtr<T> shared_from_this() {
+    if (weak_this == nullptr) {
+      throw std::bad_weak_ptr{};
+    }
+    return SharedPtr<T>(weak_this);
+  }
 
-  SharedPtr<T const> shared_from_this() const { return SharedPtr<T>(weak_this); }
+  SharedPtr<T const> shared_from_this() const {
+    if (weak_this == nullptr) {
+      throw std::bad_weak_ptr{};
+    }
+    return SharedPtr<T>(weak_this);
+  }
 
 private:
-  mutable WeakPtr<T> weak_this;
+  template <typename>
+  friend class SharedPtr;
+
+  BaseControlBlock* weak_this{nullptr};
 };
 
 template <typename T, typename Alloc, typename... Args>
@@ -80,7 +96,7 @@ public:
     typename = std::enable_if_t<std::is_same_v<T, Y> || std::is_base_of_v<T, Y>> >
   SharedPtr(Y* ptr, Deleter deleter, Alloc alloc);
 
-  template <typename Y>
+  template <typename Y, std::enable_if_t<std::is_same_v<T, Y> || std::is_base_of_v<T, Y>, bool> = true>
   explicit SharedPtr(const WeakPtr<Y>& weak): SharedPtr(static_cast<Y*>(weak.cb->get_object())) {}
 
   ~SharedPtr();
@@ -221,8 +237,7 @@ private:
   template <typename U>
   friend class SharedPtr;
 
-  template <typename U>
-  friend class EnableSharedFromThis;
+  friend EnableSharedFromThis<T>;
 
   BaseControlBlock* cb;
 };
@@ -231,7 +246,7 @@ template <typename T>
 template <typename Alloc>
 SharedPtr<T>::SharedPtr(ControlBlockMakeShared<Alloc>* control_block): cb(control_block) {
   if constexpr (std::is_base_of_v<EnableSharedFromThis<T>, T>) {
-    static_cast<T*>(cb->get_object())->weak_this = *this;
+    static_cast<T*>(cb->get_object())->weak_this = cb;
   }
 }
 
@@ -255,7 +270,7 @@ template <typename T>
 template <typename Y, typename>
 SharedPtr<T>::SharedPtr(Y* ptr): cb(new ControlBlockCommon<Y>(ptr)) {
   if constexpr (std::is_base_of_v<EnableSharedFromThis<Y>, Y>) {
-    ptr->weak_this = *this;
+    ptr->weak_this = cb;
   }
 }
 
@@ -292,7 +307,7 @@ template <typename Y, typename Deleter, typename>
 SharedPtr<T>::SharedPtr(Y* ptr, Deleter deleter):
   cb(new ControlBlockCommon<Y, Deleter>(ptr, deleter)) {
   if constexpr (std::is_base_of_v<EnableSharedFromThis<Y>, Y>) {
-    ptr->weak_this = *this;
+    ptr->weak_this = cb;
   }
 }
 
@@ -307,7 +322,7 @@ SharedPtr<T>::SharedPtr(Y* ptr, Deleter deleter, Alloc alloc) {
   new (cb) ControlBlockCommon<Y, Deleter, Alloc>(ptr, deleter, alloc);
 
   if constexpr (std::is_base_of_v<EnableSharedFromThis<Y>, Y>) {
-    ptr->weak_this = *this;
+    ptr->weak_this = cb;
   }
 }
 
