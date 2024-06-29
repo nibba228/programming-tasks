@@ -28,8 +28,6 @@ class StackAllocator {
 
   void deallocate(T* ptr, size_t count);
 
-  StackAllocator<T, N> select_on_container_copy_constructor();
-
   template <typename U>
   struct rebind {
     using other = StackAllocator<U, N>;
@@ -60,12 +58,6 @@ template <typename T, size_t N>
 void StackAllocator<T, N>::deallocate(T* ptr, size_t count) {
   std::ignore = ptr;
   std::ignore = count;
-}
-
-template <typename T, size_t N>
-StackAllocator<T, N> StackAllocator<T, N>::select_on_container_copy_constructor() {
-  StackStorage<N> storage;
-  return StackAllocator<T, N>(storage);
 }
 
 template <typename T, size_t N, typename U, size_t M>
