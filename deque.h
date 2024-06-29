@@ -46,8 +46,9 @@ class Deque {
 
     _iterator() = default;
 
-    explicit _iterator(size_t index, const Deque<T>* deque): _outer(deque->_outer),
-      _index(index) {
+    explicit _iterator(size_t index, const Deque<T>* deque)
+      : _outer(deque->_outer),
+        _index(index) {
       if ((deque->_first_alloc_index == deque->_last_alloc_index) &&
           (deque->_inner_first_index + index <= deque->_inner_last_index)) {
         _outer_index = deque->_first_alloc_index;
@@ -63,7 +64,9 @@ class Deque {
         }
       }
 
-      _current = _outer[_outer_index] + _inner_index;
+      if (_outer_index < deque->_outer_size) {
+        _current = _outer[_outer_index] + _inner_index;
+      }
     }
 
     _iterator<is_const>& operator++() {
@@ -87,7 +90,7 @@ class Deque {
 
     _iterator<is_const>& operator+=(difference_type n) {
       if (n < 0) {
-        return *this -= (-n);
+        return *this -= -n;
       }
       if (n == 1) {
         return operator++();
@@ -96,7 +99,11 @@ class Deque {
 
       if (_inner_index + n < _inner_size) {
         _inner_index += n;
-        _current += n;
+        if (_current != nullptr) {
+          _current += n;
+        } else {
+          _current = _outer[_outer_index] + _inner_index + n;
+        }
       } else {
         n -= static_cast<difference_type>(_inner_size - _inner_index);
         size_t add = static_cast<size_t>(n) / _inner_size;
@@ -139,6 +146,7 @@ class Deque {
         _current = _outer[_outer_index] + _inner_index;
       }
       --_index;
+      _is_end = false;
       return *this;
     }
 
@@ -150,7 +158,7 @@ class Deque {
 
     _iterator<is_const>& operator-=(difference_type n) {
       if (n < 0) {
-        return *this += (-n);
+        return *this += -n;
       }
 
       if (n == 1) {
@@ -160,7 +168,11 @@ class Deque {
       _index -= n;
       if (static_cast<size_t>(n) <= _inner_index) {
         _inner_index -= static_cast<size_t>(n);
-        _current -= n;
+        if (_current != nullptr) {
+          _current -= n;
+        } else {
+          _current = _outer[_outer_index] + _inner_index - n;
+        }
       } else {
         n -= static_cast<difference_type>(_inner_index);
         size_t add = static_cast<size_t>(n) / _inner_size;
@@ -220,11 +232,11 @@ class Deque {
     }
 
     bool operator<=(const _iterator<true>& it) const {
-      return (operator<(it) || operator==(it));
+      return operator<(it) || operator==(it);
     }
 
     bool operator>=(const _iterator<true>& it) const {
-      return (operator>(it) || operator==(it));
+      return operator>(it) || operator==(it);
     }
 
     bool operator<(const _iterator<false>& it) const {
@@ -250,20 +262,21 @@ class Deque {
     }
 
     bool operator<=(const _iterator<false>& it) const {
-      return (operator<(it) || operator==(it));
+      return operator<(it) || operator==(it);
     }
 
     bool operator>=(const _iterator<false>& it) const {
-      return (operator>(it) || operator==(it));
+      return operator>(it) || operator==(it);
     }
    private:
     friend class Deque<T>;
 
+    bool _is_end{false};
     T** _outer;
     size_t _inner_index;
     size_t _outer_index;
     size_t _index;
-    pointer _current;
+    pointer _current{nullptr};
   };
 
   using const_iterator = _iterator<true>;
