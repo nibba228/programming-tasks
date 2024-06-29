@@ -80,6 +80,10 @@ public:
     return static_cast<float>(_size) / _array.size();
   }
 
+  size_t bucket_count() const {
+    return _array.size();
+  }
+
   float max_load_factor() const {
     return _max_load_factor;   
   }
@@ -150,7 +154,7 @@ Value& UnorderedMap<Key, Value, Hash, Equal, Alloc>::_elem_by_index(Arg&& key) {
         throw;
       }
       
-      Value& ans = emplace(std::forward<Key>(static_cast<Key>(key)),
+      Value& ans = emplace(std::forward<Arg>(key),
         std::move(*val)).first->second;
       ValAllocTraits::destroy(_val_alloc, val);
       ValAllocTraits::deallocate(_val_alloc, val, 1);
@@ -162,8 +166,8 @@ Value& UnorderedMap<Key, Value, Hash, Equal, Alloc>::_elem_by_index(Arg&& key) {
     for (auto it = iterator(_array[hash_index]); it != end(); ++it) {
       ListNode* node = static_cast<ListNode*>(it.get_node());
 
-      if (_equal_to(node->value->first, key)) {
-        return node->value->second;
+      if (_equal_to(node->value_ptr()->first, key)) {
+        return node->value_ptr()->second;
       }
 
       if constexpr (std::is_default_constructible<Value>::value) {
@@ -175,7 +179,7 @@ Value& UnorderedMap<Key, Value, Hash, Equal, Alloc>::_elem_by_index(Arg&& key) {
             ValAllocTraits::deallocate(_val_alloc, val, 1);
             throw;
           }
-          Value& ans = emplace(std::forward<Key>(static_cast<Key>(key)),
+          Value& ans = emplace(std::forward<Arg>(key),
             std::move(*val)).first->second;
           ValAllocTraits::destroy(_val_alloc, val);
           ValAllocTraits::deallocate(_val_alloc, val, 1);
@@ -193,7 +197,7 @@ Value& UnorderedMap<Key, Value, Hash, Equal, Alloc>::_elem_by_index(Arg&& key) {
       ValAllocTraits::deallocate(_val_alloc, val, 1);
       throw;
     }
-    Value& ans = emplace(std::forward<Key>(static_cast<Key>(key)),
+    Value& ans = emplace(std::forward<Arg>(key),
       std::move(*val)).first->second;
     ValAllocTraits::destroy(_val_alloc, val);
     ValAllocTraits::deallocate(_val_alloc, val, 1);
@@ -216,7 +220,7 @@ UnorderedMap<Key, Value, Hash, Equal, Alloc>::_find(const Key& key) const {
     for (auto it = const_iterator(_array[hash_index]); it != cend(); ++it) {
       auto node = static_cast<ListNode*>(it.get_node());
 
-      if (_equal_to(node->value->first, key)) {
+      if (_equal_to(node->value_ptr()->first, key)) {
         return iterator(it.get_node());
       }
 
@@ -351,7 +355,7 @@ UnorderedMap<Key, Value, Hash, Equal, Alloc>::emplace(Args&&... args) {
   temp_list.emplace_front(0, std::forward<Args>(args)...);
 
   ListNode* node = static_cast<ListNode*>(temp_list.begin().get_node());
-  size_t hash = _hash(node->value->first);
+  size_t hash = _hash(node->value_ptr()->first);
   node->hash = hash;
   size_t hash_index = hash % _array.size();
 
@@ -365,8 +369,8 @@ UnorderedMap<Key, Value, Hash, Equal, Alloc>::emplace(Args&&... args) {
     for (auto it = iterator(_array[hash_index]); it != end(); ++it) {
       auto node = static_cast<ListNode*>(it.get_node());
 
-      if (_equal_to(node->value->first,
-          static_cast<ListNode*>(temp_list.begin().get_node())->value->first)) {
+      if (_equal_to(node->value_ptr()->first,
+          static_cast<ListNode*>(temp_list.begin().get_node())->value_ptr()->first)) {
         return std::pair<iterator, bool>(it, false);
       }
 
@@ -455,12 +459,12 @@ const Value& UnorderedMap<Key, Value, Hash, Equal, Alloc>::at(const Key& key) co
   for (auto it = iterator(_array[hash_index]); it != end(); ++it) {
     ListNode* node = static_cast<ListNode*>(it.get_node());
 
-    if (_equal_to(node->value->first, key)) {
-      return node->value->second;
+    if (_equal_to(node->value_ptr()->first, key)) {
+      return node->value_ptr()->second;
     }
   }
 
-  return _array[hash_index]->value->second;
+  return _array[hash_index]->value_ptr()->second;
 }
 
 template <typename Key, typename Value, typename Hash, typename Equal, typename Alloc>
