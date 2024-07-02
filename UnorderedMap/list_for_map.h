@@ -1,7 +1,12 @@
+#include <cmath>
+#include <stdexcept>
+#include <functional>
 #include <memory>
+#include <vector>
 #include <type_traits>
+#include <utility>
 
-template <typename Key, typename Value, typename Hash, typename Equal, typename Allocator>
+template <typename Key, typename Value, typename Hash, typename Equal, typename Alloc>
 class UnorderedMap;
 
 template <typename T, typename Allocator = std::allocator<T>>
@@ -29,6 +34,7 @@ class List {
 
  private:
   class BaseNode;
+  class Node;
  
  public:
   template <bool is_const = false>
@@ -85,11 +91,11 @@ class List {
     }
 
     reference operator*() const {
-      return *static_cast<Node*>(_current)->value;
+      return *static_cast<Node*>(_current)->value_ptr();
     }
 
     pointer operator->() const {
-      return static_cast<Node*>(_current)->value;
+      return static_cast<Node*>(_current)->value_ptr();
     }
 
     difference_type operator-(const _iterator<true>& it) const {
@@ -214,44 +220,72 @@ class List {
     BaseNode* prev = this;
   };
 
+  /*
   struct Node : BaseNode {
     using AllocatorTraits = std::allocator_traits<Allocator>;
 
     Node(const Node& other): hash(other.hash) {
       alloc = AllocatorTraits::select_on_container_copy_construction(other.alloc);
-      value = AllocatorTraits::allocate(alloc, 1);
-      try {
-        AllocatorTraits::construct(alloc, value, *other.value);
-      } catch (...) {
-        AllocatorTraits::deallocate(alloc, value, 1);
-      }
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), *reinterpret_cast<T*>(other.value_));
     }
 
-    Node(Node&& other): alloc(std::move(alloc)), hash(other.hash) {
-      value = other.value;
-      other.value = nullptr;
-      other.hash = 0;
+    Node(Node&& other): alloc(std::move(alloc)), hash(std::exchange(other.hash, 0)) {
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), std::move(*reinterpret_cast<T*>(other.value_)));
     }
 
     template <typename... Args>
-    Node(size_t hash, Args&&... args): value(AllocatorTraits::allocate(alloc, 1)), hash(hash) {
-      try {
-        AllocatorTraits::construct(alloc, value, std::forward<Args>(args)...);
-      } catch (...) {
-        AllocatorTraits::deallocate(alloc, value, 1);
-        throw;
-      }
+    Node(size_t hash, Args&&... args): hash(hash) {
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), std::forward<Args>(args)...);
+    }
+
+    T* value_ptr() const {
+      return reinterpret_cast<T*>(value_);
     }
 
     ~Node() {
-      AllocatorTraits::destroy(alloc, value);
-      AllocatorTraits::deallocate(alloc, value, 1);
+      AllocatorTraits::destroy(alloc, reinterpret_cast<T*>(value_));
     }
 
     [[no_unique_address]] Allocator alloc;
 
-    T* value;
     size_t hash;
+
+   private:
+    alignas(T) mutable char value_[sizeof(T)];
+  };
+  */
+
+  struct Node : BaseNode {
+    using AllocatorTraits = std::allocator_traits<Allocator>;
+
+    Node(const Node& other): hash(other.hash) {
+      alloc = AllocatorTraits::select_on_container_copy_construction(other.alloc);
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), *reinterpret_cast<T*>(other.value_));
+    }
+
+    Node(Node&& other): alloc(std::move(alloc)), hash(std::exchange(other.hash, 0)) {
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), std::move(*reinterpret_cast<T*>(other.value_)));
+    }
+
+    template <typename... Args>
+    Node(size_t hash, Args&&... args): hash(hash) {
+      AllocatorTraits::construct(alloc, reinterpret_cast<T*>(value_), std::forward<Args>(args)...);
+    }
+
+    T* value_ptr() const {
+      return reinterpret_cast<T*>(value_);
+    }
+
+    ~Node() {
+      AllocatorTraits::destroy(alloc, reinterpret_cast<T*>(value_));
+    }
+
+    [[no_unique_address]] Allocator alloc;
+
+    size_t hash;
+
+   private:
+    alignas(T) mutable char value_[sizeof(T)];
   };
 
   using NodeAlloc = typename std::allocator_traits<Allocator>::template rebind_alloc<Node>;
@@ -259,10 +293,10 @@ class List {
 
   friend class _iterator<false>;
   friend class _iterator<true>;
-
+  
   template <typename Key, typename Value, typename Hash, typename Equal, typename Alloc>
   friend class UnorderedMap;
-  
+
   void _init_fake_node(Node* last_el);
 
   void _init_node(Node* cur, Node* prev);
